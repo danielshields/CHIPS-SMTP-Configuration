@@ -2,7 +2,7 @@
 /**
  * Plugin Name: CHIPS SMTP Configuration
  * Description: Configure WordPress to send email via SMTP (PHPMailer). Supports wp-config/env secrets, with an optional settings UI.
- * Version: 0.1.0
+ * Version: 0.1.1
  * Author: CHIPS
  * License: GPL-2.0-or-later
  */
@@ -65,7 +65,9 @@ function chips_smtp_sanitize_options( array $raw ): array {
 	$out['host']      = isset( $raw['host'] ) ? sanitize_text_field( $raw['host'] ) : '';
 	$out['port']      = isset( $raw['port'] ) ? (int) $raw['port'] : 587;
 	$out['secure']    = isset( $raw['secure'] ) ? sanitize_text_field( $raw['secure'] ) : 'tls'; // tls|ssl|''
-	$out['auth']      = isset( $raw['auth'] ) ? (bool) $raw['auth'] : true;
+	// An unchecked checkbox submits nothing, so absence means false — not the
+	// default. Reading it as `isset() ? ... : true` made auth impossible to switch off.
+	$out['auth']      = ! empty( $raw['auth'] );
 	$out['user']      = isset( $raw['user'] ) ? sanitize_text_field( $raw['user'] ) : '';
 
 	// Password: if left blank in UI, keep the existing stored option.
@@ -457,9 +459,11 @@ function chips_smtp_render_settings_page() {
 // Make the stored option non-autoloading (minor perf hygiene)
 // -----------------------------
 
-register_activation_hook( __FILE__, function () {
-	// Create option if missing, with autoload = no.
-	if ( get_option( 'chips_smtp_options', null ) === null ) {
+// Deliberately not register_activation_hook(): that never fires for must-use
+// plugins, and this is commonly dropped into mu-plugins/. admin_init works in
+// both placements, and the get_option() is served from cache after the first.
+add_action( 'admin_init', function () {
+	if ( null === get_option( 'chips_smtp_options', null ) ) {
 		add_option( 'chips_smtp_options', [], '', 'no' );
 	}
 } );
